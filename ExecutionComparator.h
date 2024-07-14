@@ -1,4 +1,3 @@
-#include <iostream>
 #include <array>
 
 namespace _ExecutionComparatorHelpers
@@ -40,28 +39,83 @@ namespace _ExecutionComparatorHelpers
 		return allBoolCombs;
 	}
 
-	template<typename... Bools, typename Array, size_t... Indices>
-	constexpr bool CheckWithBoolSet(bool(*func)(Bools...), Array array, std::index_sequence<Indices...>)
+	template<typename Type>
+	struct FunctionTraits;
+
+	template<typename... Bools>
+	struct FunctionTraits<bool(*)(Bools...)>
+	{
+		constexpr static size_t boolAmount = sizeof...(Bools);
+	};
+
+	template<size_t boolAmount, typename Func>
+	constexpr void AssertCurrentBoolAmount(Func func)
+	{
+		static_assert(
+			(boolAmount == FunctionTraits<Func>::boolAmount) &&
+			"Boolean amount is not the same for all functions"
+		);
+	}
+
+	template<size_t boolAmount, typename Func>
+	constexpr void AssertBoolAmountImpl(Func func)
+	{
+		AssertCurrentBoolAmount<boolAmount>(func);
+	}
+
+	template<size_t boolAmount, typename Func, typename... Funcs>
+	constexpr void AssertBoolAmountImpl(Func func, Funcs... funcs)
+	{
+		AssertCurrentBoolAmount<boolAmount>(func);
+		AssertBoolAmountImpl<boolAmount>(funcs...);
+	}
+
+	template<size_t boolAmount, typename... Funcs>
+	constexpr void AssertBoolAmount(Funcs... funcs)
+	{
+		AssertBoolAmountImpl<boolAmount>(funcs...);
+	}
+
+	template<typename Func, typename Array, size_t... Indices>
+	constexpr bool CheckWithBoolSet(Func func, Array array, std::index_sequence<Indices...>)
 	{
 		return func(array[Indices]...);
 	}
+
+	template<size_t boolAmount, typename Array, typename Func>
+	constexpr size_t CallCheckWithBoolSet(Array array, Func func)
+	{
+		return CheckWithBoolSet(func, array, std::make_index_sequence<boolAmount>{});
+	}
+
+	template<size_t boolAmount, typename Array, typename Func, typename... Funcs>
+	constexpr size_t CallCheckWithBoolSet(Array array, Func func, Funcs... funcs)
+	{
+		return CheckWithBoolSet(func, array, std::make_index_sequence<boolAmount>{}) + 
+			   CallCheckWithBoolSet<boolAmount>(array, funcs...);
+	}
+
+	template<size_t funcAmount>
+	constexpr bool CheckPureEquivalecy(size_t counted)
+	{
+		return counted == 0 || counted == funcAmount;
+	}
 }
 
-template<typename... Bools>
-constexpr bool CompareConditionals(bool(*func1)(Bools...), bool(*func2)(Bools...))
+template<typename Func, typename... Funcs>
+constexpr bool ExecutionComparator(Func func, Funcs... funcs)
 {
 	using namespace _ExecutionComparatorHelpers;
 
-	constexpr size_t n = sizeof...(Bools);
-	constexpr size_t pow = Pow(2, n);
-	constexpr auto allBoolCombs = GetAllBoolCombs<n, pow>();
+	constexpr size_t funcAmount = sizeof...(Funcs) + 1;
+	constexpr size_t boolAmount = FunctionTraits<Func>::boolAmount;
+	AssertBoolAmount<boolAmount>(funcs...);
+	constexpr size_t pow = Pow(2, boolAmount);
+	constexpr auto allBoolCombs = GetAllBoolCombs<boolAmount, pow>();
 
 	for (size_t i = 0; i < pow; ++i)
 	{
-		if (
-			CheckWithBoolSet(func1, allBoolCombs[i], std::make_index_sequence<n>{}) !=
-			CheckWithBoolSet(func2, allBoolCombs[i], std::make_index_sequence<n>{})
-			)
+		if (!CheckPureEquivalecy<funcAmount>(CallCheckWithBoolSet<boolAmount>(allBoolCombs[i], func, funcs...)))
 		{
 			return false;
 		}
