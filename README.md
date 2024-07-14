@@ -44,6 +44,11 @@ constexpr bool func2(bool a, bool b)
 	return (!a || b);
 }
 
+constexpr bool func3(bool a, bool b)
+{
+	return !(a && !b);
+}
+
 constexpr bool func4(bool a, bool b, bool c)
 {
 	return a && b && c;
