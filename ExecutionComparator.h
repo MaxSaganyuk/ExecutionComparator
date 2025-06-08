@@ -8,19 +8,11 @@
 
 namespace _ExecutionComparatorHelpers
 {
-	constexpr size_t Pow(size_t n, size_t k)
+	constexpr size_t Pow2(size_t k)
 	{
-		if (!k)
-		{
-			return 1;
-		}
+		size_t res = 1;
 
-		size_t res = n;
-
-		for (size_t i = 1; i < k; ++i)
-		{
-			res *= n;
-		}
+		res <<= (k - 1);
 
 		return res;
 	}
@@ -28,8 +20,6 @@ namespace _ExecutionComparatorHelpers
 	template<size_t n, size_t pow>
 	constexpr auto GetAllBoolCombs()
 	{
-		static_assert(n < 64 && "Algorithm limits amount of bool params to 64");
-
 		std::array<std::array<bool, n>, pow> allBoolCombs{};
 
 		for (size_t comb = 0; comb < pow; ++comb)
@@ -119,6 +109,7 @@ namespace _ExecutionComparatorHelpers
 	template<size_t boolAmount, typename... Funcs>
 	constexpr void AssertBoolAmount(Funcs... funcs)
 	{
+		static_assert(boolAmount < 64 && "Algorithm limits amount of bool params to 64");
 		AssertBoolAmountImpl<boolAmount>(funcs...);
 	}
 
@@ -156,7 +147,7 @@ constexpr bool ExecutionComparator(Func func, Funcs... funcs)
 	constexpr size_t funcAmount = sizeof...(Funcs) + 1;
 	constexpr size_t boolAmount = FunctionTraits<Func>::boolAmount;
 	AssertBoolAmount<boolAmount>(funcs...);
-	constexpr size_t pow = Pow(2, boolAmount);
+	constexpr size_t pow = Pow2(boolAmount);
 	constexpr auto allBoolCombs = GetAllBoolCombs<boolAmount, pow>();
 
 	for (size_t i = 0; i < pow; ++i)
