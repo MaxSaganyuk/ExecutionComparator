@@ -1,5 +1,11 @@
 #include <array>
 
+#ifdef DISABLE_STRICT_BOOL_ARGS
+#define STRICT_BOOL_ARGS 0
+#else
+#define STRICT_BOOL_ARGS 1
+#endif
+
 namespace _ExecutionComparatorHelpers
 {
 	constexpr size_t Pow(size_t n, size_t k)
@@ -24,7 +30,7 @@ namespace _ExecutionComparatorHelpers
 	{
 		static_assert(n < 64 && "Algorithm limits amount of bool params to 64");
 
-		std::array<std::array<bool, n>, pow> allBoolCombs;
+		std::array<std::array<bool, n>, pow> allBoolCombs{};
 
 		for (size_t comb = 0; comb < pow; ++comb)
 		{
@@ -39,13 +45,53 @@ namespace _ExecutionComparatorHelpers
 		return allBoolCombs;
 	}
 
+	template<typename Arg>
+	constexpr void AssertCurrentArgIsBool()
+	{
+		static_assert(std::is_same_v<Arg, bool> && "Not all arguments are bools");
+	}
+
+	template<typename Arg, typename... Args>
+	constexpr void AssertArgsAreBools()
+	{
+		AssertCurrentArgIsBool<Arg>();
+
+		if constexpr (sizeof...(Args) != 0)
+		{
+			AssertArgsAreBools<Args...>();
+		}
+	}
+
+	template<typename... Bools>
+	constexpr size_t GetAmountOfBoolArgs()
+	{
+		if constexpr (STRICT_BOOL_ARGS)
+		{
+			AssertArgsAreBools<Bools...>();
+		}
+
+		return sizeof...(Bools);
+	}
+
 	template<typename Type>
-	struct FunctionTraits;
+	struct FunctionTraits : FunctionTraits<decltype(&Type::operator())>{};
+
+	template<typename CallableStructType, typename... Bools>
+	struct FunctionTraits<bool(CallableStructType::*)(Bools...) const>
+	{
+		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
+	};
+
+	template<typename CallableStructType, typename... Bools>
+	struct FunctionTraits<bool(CallableStructType::*)(Bools...)>
+	{
+		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
+	};
 
 	template<typename... Bools>
 	struct FunctionTraits<bool(*)(Bools...)>
 	{
-		constexpr static size_t boolAmount = sizeof...(Bools);
+		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
 	};
 
 	template<size_t boolAmount, typename Func>
