@@ -1,4 +1,5 @@
-#include <array>
+#ifndef EXECUTION_COMPARATOR
+#define EXECUTION_COMPARATOR
 
 #ifdef DISABLE_STRICT_BOOL_ARGS
 #define STRICT_BOOL_ARGS 0
@@ -8,31 +9,72 @@
 
 namespace _ExecutionComparatorHelpers
 {
+	template<size_t n>
+	class Bitset // std::bitset is not constexpr in C++20
+	{
+		template<size_t n, typename Type, typename... Types>
+		struct GeneralizedConditional : GeneralizedConditional<n - 1, Types...>
+		{
+			static_assert((n > 0 && n < sizeof...(Types) + 1) && "Invalid index for the amount of listed types");
+		};
+
+		template<typename Type, typename... Types>
+		struct GeneralizedConditional<0, Type, Types...>
+		{
+			using TypeToUse = Type;
+		};
+
+		constexpr static unsigned short bitInByte = 8;
+		constexpr static unsigned short cppIntTypeAmount = 4;
+		constexpr static unsigned short maxBitAmount = (bitInByte << (cppIntTypeAmount - 1));
+
+		// Even 32 will be more than enough, no need to extend to larger sizes
+		static_assert(n <= maxBitAmount && "Invalid bit size");
+
+		template<size_t n>
+		consteval static unsigned short GetBitValueTypeIndex()
+		{
+			for (unsigned short i = 0; i < cppIntTypeAmount - 1; ++i)
+			{
+				if (n < (bitInByte << i))
+				{
+					return i;
+				}
+			}
+		}
+
+		GeneralizedConditional<
+			GetBitValueTypeIndex<n>(),
+			unsigned char,     // 8 bits or less
+			unsigned short,    // 16 bits or less
+			unsigned int,      // 32 bits or less
+			unsigned long long // 64 bits or less
+		>::TypeToUse bits;
+
+	public:
+		constexpr Bitset(size_t number)
+		{
+			bits = static_cast<decltype(bits)>(number);
+		}
+
+		constexpr bool operator[](unsigned short index) const
+		{
+			if (index < 0 || index > n)
+			{
+				return false;
+			}
+
+			return (bits & (1ull << index));
+		}
+	};
+
 	constexpr size_t Pow2(size_t k)
 	{
 		size_t res = 1;
 
-		res <<= (k - 1);
+		res <<= k;
 
 		return res;
-	}
-
-	template<size_t n, size_t pow>
-	constexpr auto GetAllBoolCombs()
-	{
-		std::array<std::array<bool, n>, pow> allBoolCombs{};
-
-		for (size_t comb = 0; comb < pow; ++comb)
-		{
-			size_t comparator = 1;
-			for (size_t j = 0; j < n; ++j)
-			{
-				allBoolCombs[comb][j] = comb & comparator;
-				comparator <<= 1;
-			}
-		}
-
-		return allBoolCombs;
 	}
 
 	template<typename Arg>
@@ -113,23 +155,23 @@ namespace _ExecutionComparatorHelpers
 		AssertBoolAmountImpl<boolAmount>(funcs...);
 	}
 
-	template<typename Func, typename Array, size_t... Indices>
-	constexpr bool CheckWithBoolSet(Func func, Array array, std::index_sequence<Indices...>)
+	template<size_t boolAmount, typename Func, size_t... Indices>
+	constexpr bool CheckWithBoolSet(Func func, Bitset<boolAmount> bitset, std::index_sequence<Indices...>)
 	{
-		return func(array[Indices]...);
+		return func(bitset[Indices]...);
 	}
 
-	template<size_t boolAmount, typename Array, typename Func>
-	constexpr size_t CallCheckWithBoolSet(Array array, Func func)
+	template<size_t boolAmount, typename Func>
+	constexpr size_t CallCheckWithBoolSet(Bitset<boolAmount> bitset, Func func)
 	{
-		return CheckWithBoolSet(func, array, std::make_index_sequence<boolAmount>{});
+		return CheckWithBoolSet(func, bitset, std::make_index_sequence<boolAmount>{});
 	}
 
-	template<size_t boolAmount, typename Array, typename Func, typename... Funcs>
-	constexpr size_t CallCheckWithBoolSet(Array array, Func func, Funcs... funcs)
+	template<size_t boolAmount, typename Func, typename... Funcs>
+	constexpr size_t CallCheckWithBoolSet(Bitset<boolAmount> bitset, Func func, Funcs... funcs)
 	{
-		return CheckWithBoolSet(func, array, std::make_index_sequence<boolAmount>{}) + 
-			   CallCheckWithBoolSet<boolAmount>(array, funcs...);
+		return CheckWithBoolSet(func, bitset, std::make_index_sequence<boolAmount>{}) +
+			   CallCheckWithBoolSet<boolAmount>(bitset, funcs...);
 	}
 
 	template<size_t funcAmount>
@@ -148,11 +190,12 @@ constexpr bool ExecutionComparator(Func func, Funcs... funcs)
 	constexpr size_t boolAmount = FunctionTraits<Func>::boolAmount;
 	AssertBoolAmount<boolAmount>(funcs...);
 	constexpr size_t pow = Pow2(boolAmount);
-	constexpr auto allBoolCombs = GetAllBoolCombs<boolAmount, pow>();
 
 	for (size_t i = 0; i < pow; ++i)
 	{
-		if (!CheckPureEquivalecy<funcAmount>(CallCheckWithBoolSet<boolAmount>(allBoolCombs[i], func, funcs...)))
+		if (!CheckPureEquivalecy<funcAmount>(
+			CallCheckWithBoolSet<boolAmount>(Bitset<boolAmount>(i), func, funcs...))
+		)
 		{
 			return false;
 		}
@@ -160,3 +203,5 @@ constexpr bool ExecutionComparator(Func func, Funcs... funcs)
 
 	return true;
 }
+
+#endif 
