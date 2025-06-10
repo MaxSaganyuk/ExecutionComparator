@@ -17,7 +17,7 @@ namespace _ExecutionComparatorHelpers
 		template<size_t n, typename Type, typename... Types>
 		struct GeneralizedConditional : GeneralizedConditional<n - 1, Types...>
 		{
-			static_assert((n > 0 && n < sizeof...(Types) + 1) && "Invalid index for the amount of listed types");
+			static_assert((n > 0 && n < sizeof...(Types) + 1), "Invalid index for the amount of listed types");
 		};
 
 		template<typename Type, typename... Types>
@@ -31,7 +31,7 @@ namespace _ExecutionComparatorHelpers
 		constexpr static unsigned short maxBitAmount = (bitInByte << (cppIntTypeAmount - 1));
 
 		// Even 32 will be more than enough, no need to extend to larger sizes
-		static_assert(n <= maxBitAmount && "Invalid bit size");
+		static_assert(n <= maxBitAmount, "Invalid bit size");
 
 		template<size_t n>
 		consteval static unsigned short GetBitValueTypeIndex()
@@ -82,7 +82,7 @@ namespace _ExecutionComparatorHelpers
 	template<typename Arg>
 	constexpr void AssertCurrentArgIsBool()
 	{
-		static_assert(std::is_same_v<Arg, bool> && "Not all arguments are bools");
+		static_assert(std::is_same_v<Arg, bool>, "Not all arguments are bools");
 	}
 
 	template<typename Arg, typename... Args>
@@ -132,7 +132,7 @@ namespace _ExecutionComparatorHelpers
 	constexpr void AssertCurrentBoolAmount(Func func)
 	{
 		static_assert(
-			(boolAmount == FunctionTraits<Func>::boolAmount) &&
+			(boolAmount == FunctionTraits<Func>::boolAmount),
 			"Boolean amount is not the same for all functions"
 		);
 	}
@@ -153,7 +153,7 @@ namespace _ExecutionComparatorHelpers
 	template<size_t boolAmount, typename... Funcs>
 	constexpr void AssertBoolAmount(Funcs... funcs)
 	{
-		static_assert(boolAmount < 64 && "Algorithm limits amount of bool params to 64");
+		static_assert(boolAmount <= 64, "Algorithm limits amount of bool params to 64");
 		AssertBoolAmountImpl<boolAmount>(funcs...);
 	}
 
