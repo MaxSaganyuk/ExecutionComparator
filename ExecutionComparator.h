@@ -109,7 +109,7 @@ namespace _ExecutionComparatorHelpers
 	}
 
 	template<typename Type>
-	struct FunctionTraits : FunctionTraits<decltype(&Type::operator())>{};
+	struct FunctionTraits : FunctionTraits<decltype(&std::remove_reference_t<Type>::operator())>{};
 
 	template<std::integral RetType, typename CallableStructType, typename... Bools>
 	struct FunctionTraits<RetType(CallableStructType::*)(Bools...) const>
@@ -126,14 +126,14 @@ namespace _ExecutionComparatorHelpers
 	};
 
 	template<std::integral RetType, typename... Bools>
-	struct FunctionTraits<RetType(*)(Bools...)>
+	struct FunctionTraits<RetType(&)(Bools...)>
 	{
 		using ReturnType = RetType;
 		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
 	};
 
 	template<size_t boolAmount, typename Func>
-	constexpr void AssertCurrentBoolAmount(Func func)
+	constexpr void AssertCurrentBoolAmount(Func&& func)
 	{
 		static_assert(
 			(boolAmount == FunctionTraits<Func>::boolAmount),
@@ -142,52 +142,52 @@ namespace _ExecutionComparatorHelpers
 	}
 
 	template<size_t boolAmount, typename Func>
-	constexpr void AssertBoolAmountImpl(Func func)
+	constexpr void AssertBoolAmountImpl(Func&& func)
 	{
-		AssertCurrentBoolAmount<boolAmount>(func);
+		AssertCurrentBoolAmount<boolAmount>(std::forward<Func>(func));
 	}
 
 	template<size_t boolAmount, typename Func, typename... Funcs>
-	constexpr void AssertBoolAmountImpl(Func func, Funcs... funcs)
+	constexpr void AssertBoolAmountImpl(Func&& func, Funcs&&... funcs)
 	{
-		AssertCurrentBoolAmount<boolAmount>(func);
-		AssertBoolAmountImpl<boolAmount>(funcs...);
+		AssertCurrentBoolAmount<boolAmount>(std::forward<Func>(func));
+		AssertBoolAmountImpl<boolAmount>(std::forward<Funcs>(funcs)...);
 	}
 
 	template<size_t boolAmount, typename... Funcs>
-	constexpr void AssertBoolAmount(Funcs... funcs)
+	constexpr void AssertBoolAmount(Funcs&&... funcs)
 	{
 		static_assert(boolAmount <= 64, "Algorithm limits amount of bool params to 64");
-		AssertBoolAmountImpl<boolAmount>(funcs...);
+		AssertBoolAmountImpl<boolAmount>(std::forward<Funcs>(funcs)...);
 	}
 
 	template<size_t boolAmount, size_t funcAmount, typename Func, size_t... Indices>
 	constexpr void CheckWithBoolSet(
-		Func func, Bitset<boolAmount> bitset, 
+		Func&& func, Bitset<boolAmount> bitset, 
 		std::array<typename FunctionTraits<Func>::ReturnType, funcAmount>& executionRets, size_t i, 
 		std::index_sequence<Indices...>
 	)
 	{
-		executionRets[i] = func(bitset[Indices]...);
+		executionRets[i] = std::forward<Func>(func)(bitset[Indices]...);
 	}
 
 	template<size_t boolAmount, size_t funcAmount, typename Func>
 	constexpr void CallCheckWithBoolSet(
 		Bitset<boolAmount> bitset, std::array<typename FunctionTraits<Func>::ReturnType, funcAmount>& executionRets, 
-		size_t i, Func func
+		size_t i, Func&& func
 	)
 	{
-		CheckWithBoolSet(func, bitset, executionRets, i, std::make_index_sequence<boolAmount>{});
+		CheckWithBoolSet(std::forward<Func>(func), bitset, executionRets, i, std::make_index_sequence<boolAmount>{});
 	}
 
 	template<size_t boolAmount, size_t funcAmount, typename Func, typename... Funcs>
 	constexpr void CallCheckWithBoolSet(
 		Bitset<boolAmount> bitset, std::array<typename FunctionTraits<Func>::ReturnType, funcAmount>& executionRets, 
-		size_t i, Func func, Funcs... funcs
+		size_t i, Func&& func, Funcs&&... funcs
 	)
 	{
-		CheckWithBoolSet(func, bitset, executionRets, i, std::make_index_sequence<boolAmount>{});
-		CallCheckWithBoolSet<boolAmount>(bitset, executionRets, i + 1, funcs...);
+		CheckWithBoolSet(std::forward<Func>(func), bitset, executionRets, i, std::make_index_sequence<boolAmount>{});
+		CallCheckWithBoolSet<boolAmount>(bitset, executionRets, i + 1, std::forward<Funcs>(funcs)...);
 	}
 
 	/*
@@ -214,25 +214,22 @@ namespace _ExecutionComparatorHelpers
 }
 
 template<typename Func, typename... Funcs>
-constexpr bool ExecutionComparator(Func func, Funcs... funcs)
+constexpr bool ExecutionComparator(Func&& func, Funcs&&... funcs)
 {
 	using namespace _ExecutionComparatorHelpers;
 
 	constexpr size_t funcAmount = sizeof...(Funcs) + 1;
 	constexpr size_t boolAmount = FunctionTraits<Func>::boolAmount;
-	AssertBoolAmount<boolAmount>(funcs...);
+	AssertBoolAmount<boolAmount>(std::forward<Funcs>(funcs)...);
 	constexpr size_t pow = Pow2(boolAmount);
 
 	std::array<typename FunctionTraits<Func>::ReturnType, funcAmount> executionRets{};
 
 	for (size_t i = 0; i < pow; ++i)
 	{
-		CallCheckWithBoolSet(Bitset<boolAmount>(i), executionRets, 0, func, funcs...);
+		CallCheckWithBoolSet(Bitset<boolAmount>(i), executionRets, 0, std::forward<Func>(func), std::forward<Funcs>(funcs)...);
 
-		if (!CheckPureEquivalecy<Func>(executionRets))
-		{
-			return false;
-		}
+		if (!CheckPureEquivalecy<Func>(executionRets)) return false;
 	}
 
 	return true;
