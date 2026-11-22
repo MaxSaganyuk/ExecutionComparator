@@ -111,21 +111,21 @@ namespace _ExecutionComparatorHelpers
 	template<typename Type>
 	struct FunctionTraits : FunctionTraits<decltype(&std::remove_reference_t<Type>::operator())>{};
 
-	template<std::integral RetType, typename CallableStructType, typename... Bools>
+	template<std::equality_comparable RetType, typename CallableStructType, typename... Bools>
 	struct FunctionTraits<RetType(CallableStructType::*)(Bools...) const>
 	{
 		using ReturnType = RetType;
 		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
 	};
 
-	template<std::integral RetType, typename CallableStructType, typename... Bools>
+	template<std::equality_comparable RetType, typename CallableStructType, typename... Bools>
 	struct FunctionTraits<RetType(CallableStructType::*)(Bools...)>
 	{
 		using ReturnType = RetType;
 		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
 	};
 
-	template<std::integral RetType, typename... Bools>
+	template<std::equality_comparable RetType, typename... Bools>
 	struct FunctionTraits<RetType(&)(Bools...)>
 	{
 		using ReturnType = RetType;
