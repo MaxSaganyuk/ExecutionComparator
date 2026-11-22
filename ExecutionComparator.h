@@ -2,6 +2,7 @@
 #define EXECUTION_COMPARATOR
 
 #include <utility>
+#include <array>
 
 #ifdef DISABLE_STRICT_BOOL_ARGS
 #define STRICT_BOOL_ARGS 0
@@ -110,21 +111,24 @@ namespace _ExecutionComparatorHelpers
 	template<typename Type>
 	struct FunctionTraits : FunctionTraits<decltype(&Type::operator())>{};
 
-	template<typename CallableStructType, typename... Bools>
-	struct FunctionTraits<bool(CallableStructType::*)(Bools...) const>
+	template<std::integral RetType, typename CallableStructType, typename... Bools>
+	struct FunctionTraits<RetType(CallableStructType::*)(Bools...) const>
 	{
+		using ReturnType = RetType;
 		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
 	};
 
-	template<typename CallableStructType, typename... Bools>
-	struct FunctionTraits<bool(CallableStructType::*)(Bools...)>
+	template<std::integral RetType, typename CallableStructType, typename... Bools>
+	struct FunctionTraits<RetType(CallableStructType::*)(Bools...)>
 	{
+		using ReturnType = RetType;
 		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
 	};
 
-	template<typename... Bools>
-	struct FunctionTraits<bool(*)(Bools...)>
+	template<std::integral RetType, typename... Bools>
+	struct FunctionTraits<RetType(*)(Bools...)>
 	{
+		using ReturnType = RetType;
 		constexpr static size_t boolAmount = GetAmountOfBoolArgs<Bools...>();
 	};
 
@@ -157,29 +161,55 @@ namespace _ExecutionComparatorHelpers
 		AssertBoolAmountImpl<boolAmount>(funcs...);
 	}
 
-	template<size_t boolAmount, typename Func, size_t... Indices>
-	constexpr bool CheckWithBoolSet(Func func, Bitset<boolAmount> bitset, std::index_sequence<Indices...>)
+	template<size_t boolAmount, size_t funcAmount, typename Func, size_t... Indices>
+	constexpr void CheckWithBoolSet(
+		Func func, Bitset<boolAmount> bitset, 
+		std::array<typename FunctionTraits<Func>::ReturnType, funcAmount>& executionRets, size_t i, 
+		std::index_sequence<Indices...>
+	)
 	{
-		return func(bitset[Indices]...);
+		executionRets[i] = func(bitset[Indices]...);
 	}
 
-	template<size_t boolAmount, typename Func>
-	constexpr size_t CallCheckWithBoolSet(Bitset<boolAmount> bitset, Func func)
+	template<size_t boolAmount, size_t funcAmount, typename Func>
+	constexpr void CallCheckWithBoolSet(
+		Bitset<boolAmount> bitset, std::array<typename FunctionTraits<Func>::ReturnType, funcAmount>& executionRets, 
+		size_t i, Func func
+	)
 	{
-		return CheckWithBoolSet(func, bitset, std::make_index_sequence<boolAmount>{});
+		CheckWithBoolSet(func, bitset, executionRets, i, std::make_index_sequence<boolAmount>{});
 	}
 
-	template<size_t boolAmount, typename Func, typename... Funcs>
-	constexpr size_t CallCheckWithBoolSet(Bitset<boolAmount> bitset, Func func, Funcs... funcs)
+	template<size_t boolAmount, size_t funcAmount, typename Func, typename... Funcs>
+	constexpr void CallCheckWithBoolSet(
+		Bitset<boolAmount> bitset, std::array<typename FunctionTraits<Func>::ReturnType, funcAmount>& executionRets, 
+		size_t i, Func func, Funcs... funcs
+	)
 	{
-		return CheckWithBoolSet(func, bitset, std::make_index_sequence<boolAmount>{}) +
-			   CallCheckWithBoolSet<boolAmount>(bitset, funcs...);
+		CheckWithBoolSet(func, bitset, executionRets, i, std::make_index_sequence<boolAmount>{});
+		CallCheckWithBoolSet<boolAmount>(bitset, executionRets, i + 1, funcs...);
 	}
 
-	template<size_t funcAmount>
-	constexpr bool CheckPureEquivalecy(size_t counted)
+	/*
+	* The reason simple == 0 to == funcAmount cannot be reused for new "non bool return type" idea
+	* is simply because it was dependent on sum of bool returns and since we can return size_t values now,
+	* a simple sum of two max bound values will cause an overflow.
+	* Storing each return for biset fixes the issue. I will miss that pretty solution.
+	*/
+	template<typename Func, size_t funcAmount>
+	constexpr bool CheckPureEquivalecy(std::array<typename FunctionTraits<Func>::ReturnType, funcAmount>& executionRets)
 	{
-		return counted == 0 || counted == funcAmount;
+		if (executionRets.size() > 1)
+		{
+			typename FunctionTraits<Func>::ReturnType firstValue = executionRets[0];
+
+			for (size_t i = 1; i < executionRets.size(); ++i)
+			{
+				if (firstValue != executionRets[i]) return false;
+			}
+		}
+
+		return true;
 	}
 }
 
@@ -193,11 +223,13 @@ constexpr bool ExecutionComparator(Func func, Funcs... funcs)
 	AssertBoolAmount<boolAmount>(funcs...);
 	constexpr size_t pow = Pow2(boolAmount);
 
+	std::array<typename FunctionTraits<Func>::ReturnType, funcAmount> executionRets{};
+
 	for (size_t i = 0; i < pow; ++i)
 	{
-		if (!CheckPureEquivalecy<funcAmount>(
-			CallCheckWithBoolSet<boolAmount>(Bitset<boolAmount>(i), func, funcs...))
-		)
+		CallCheckWithBoolSet(Bitset<boolAmount>(i), executionRets, 0, func, funcs...);
+
+		if (!CheckPureEquivalecy<Func>(executionRets))
 		{
 			return false;
 		}
