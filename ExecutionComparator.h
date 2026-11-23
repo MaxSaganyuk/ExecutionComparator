@@ -197,12 +197,9 @@ namespace _ExecutionComparatorHelpers
 
 		constexpr bool operator[](unsigned short index) const
 		{
-			if (index < 0 || index > n)
-			{
-				return false;
-			}
+			if (index < 0 || index >= n) return false;
 
-			return (bits & (1ull << index));
+			return (bits & ((1ull << (n - 1)) >> index));
 		}
 
 		constexpr operator auto() const
